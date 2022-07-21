@@ -318,15 +318,30 @@ class LspServer:
         return uri
 
     def send_did_open_notification(self, filepath, external_file_link=None):
-        with open(filepath, encoding="utf-8") as f:
-            self.sender.send_notification("textDocument/didOpen", {
-                "textDocument": {
-                    "uri": self.parse_document_uri(filepath, external_file_link),
-                    "languageId": self.server_info["languageId"],
-                    "version": 0,
-                    "text": f.read()
-                }
-            })
+        try:
+            with open(filepath, encoding="utf-8") as f:
+                self.sender.send_notification("textDocument/didOpen", {
+                    "textDocument": {
+                        "uri": self.parse_document_uri(filepath, external_file_link),
+                        "languageId": self.server_info["languageId"],
+                        "version": 0,
+                        "text": f.read()
+                    }
+                })
+        except:
+            import chardet
+            with open(filepath, 'rb') as f:
+                result = chardet.detect(f.read())
+                if result is not None:
+                    with open(filepath, encoding=result['encoding']) as f:
+                        self.sender.send_notification("textDocument/didOpen", {
+                    "textDocument": {
+                        "uri": self.parse_document_uri(filepath, external_file_link),
+                        "languageId": self.server_info["languageId"],
+                        "version": 0,
+                        "text": f.read()
+                    }
+                })
 
     def send_did_close_notification(self, filepath):
         self.sender.send_notification("textDocument/didClose", {
