@@ -55,6 +55,7 @@ lsp-bridge开箱即用， 安装好语言对应的[LSP服务器](https://github.
 * `lsp-bridge-signature-help-fetch`: 在minibuffer显示参数信息
 * `lsp-bridge-insert-common-prefix`: 插入补全后选词的公共前缀
 * `lsp-bridge-restart-process`: 重启lsp-bridge进程 (一般只有开发者才需要这个功能)
+* `lsp-bridge-popup-complete`: 手动弹出补全菜单， 只有当打开 `lsp-bridge-complete-manually` 选项才需要使用这个命令
 * `acm-doc-scroll-up`: API文档窗口向上滚动
 * `acm-doc-scroll-down`: API文档窗口向下滚动
 
@@ -75,12 +76,15 @@ lsp-bridge开箱即用， 安装好语言对应的[LSP服务器](https://github.
 * `lsp-bridge-python-command`: Python命令的路径, 如果你用 `conda`， 你也许会定制这个选项
 * `lsp-bridge-signature-function`: 用于显示签名信息的函数
 * `lsp-bridge-c-lsp-server`: C语言的服务器，可以选择`clangd`或者`ccls`
+* `lsp-bridge-python-lsp-server`: Python语言的服务器，可以选择`pyright`或者`jedi`
+* `lsp-bridge-complete-manually`: 只有当用户手动调用 `lsp-bridge-popup-complete` 命令的时候才弹出补全菜单， 默认关闭
 * `acm-backend-lsp-enable-auto-import`: 支持自动导入， 默认打开
 * `acm-candidate-match-function`: 补全菜单匹配算法， orderless-* 开头的算法需要额外安装 [orderless](https://github.com/oantolin/orderless)
 * `acm-enable-doc`: 补全菜单是否显示帮助文档
-* `acm-enable-icon`: 补全菜单是否显示图标
+* `acm-enable-icon`: 补全菜单是否显示图标, macOS用户需要给 brew 命令增加选项 `--with-rsvg` 来安装Emacs才能显示SVG图片
 * `acm-fetch-candidate-doc-delay`: 补全菜单弹出文档的延时， 不建议设置成0， 会降低菜单选择性能
 * `acm-snippet-insert-index`: 代码模板后选词在补全菜单中的显示位置
+* `acm-doc-frame-max-lines`: 帮助窗口的最大行数， 默认是20
 
 ## 自定义语言服务器配置
 lsp-bridge每种语言的服务器配置存储在[lsp-bridge/langserver](https://github.com/manateelazycat/lsp-bridge/tree/master/langserver).
@@ -135,6 +139,8 @@ lsp-bridge每种语言的服务器配置存储在[lsp-bridge/langserver](https:/
 | 28 | [serve-d](https://github.com/Pure-D/serve-d) | d | serve-d 不支持单文件模式, 使用前请先在项目目录下初始 git 仓库或者自定义 `lsp-bridge-get-project-path-by-filepath` 返回项目目录 |
 | 29 | [fortls](https://github.com/gnikit/fortls) | Fortran | |
 | 30 | [ccls](https://github.com/MaskRay/ccls) | c, c++, object-c | `lsp-bridge-c-lsp-server` 设置成 `ccls` |
+| 31 | [jedi](https://github.com/pappasam/jedi-language-server) | python | `lsp-bridge-python-lsp-server` 设置成 `jedi` |
+| 32 | [emmet-ls](https://github.com/aca/emmet-ls) | html, js, css, sass, scss, less | |
 
 ### 不会支持的特性：
 lsp-bridge的目标是实现Emacs生态中性能最快的LSP客户端, 但不是实现LSP协议最全的LSP客户端。

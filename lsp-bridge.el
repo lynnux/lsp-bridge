@@ -12,7 +12,7 @@
 ;; URL: https://github.com/manateelazycat/lsp-bridge
 ;; Keywords:
 ;; Compatibility: emacs-version >= 27
-;; Package-Requires: ((emacs "27"))
+;; Package-Requires: ((emacs "27") (posframe "1.1.7") (markdown-mode "2.6-dev"))
 ;;
 ;; Features that might be required by this library:
 ;;
@@ -114,6 +114,7 @@
                                                     lsp-bridge-not-follow-complete
                                                     lsp-bridge-is-evil-state
                                                     lsp-bridge-multiple-cursors-disable
+                                                    lsp-bridge-not-complete-manually
                                                     )
   "A list of predicate functions with no argument to enable popup completion in callback."
   :type 'list
@@ -306,11 +307,18 @@ Then LSP-Bridge will start by gdb, please send new issue with `*lsp-bridge*' buf
   "Default LSP server for C language, you can choose `clangd' or `ccls'."
   :type 'string)
 
+(defcustom lsp-bridge-python-lsp-server "pyright"
+  "Default LSP server for Python language, you can choose `pyright' or `jedi'."
+  :type 'string)
+
+(defcustom lsp-bridge-complete-manually nil
+  "Only popup completion menu when user call `lsp-bridge-popup-complete' command.")
+
 (defcustom lsp-bridge-lang-server-mode-list
   '(
     ((c-mode c++-mode objc-mode) . lsp-bridge-c-lsp-server)
     (java-mode . "jdtls")
-    (python-mode . "pyright")
+    (python-mode . lsp-bridge-python-lsp-server)
     (ruby-mode . "solargraph")
     ((rust-mode rustic-mode) . "rust-analyzer")
     (elixir-mode . "elixirLS")
@@ -704,6 +712,10 @@ you can customize `lsp-bridge-get-project-path-by-filepath' to return project pa
         (acm-update)
       (acm-hide))))
 
+(defun lsp-bridge-popup-complete ()
+  (interactive)
+  (acm-update))
+
 (defun lsp-bridge-not-match-stop-commands ()
   "Hide completion if `lsp-bridge-last-change-command' match commands in `lsp-bridge-completion-stop-commands'."
   (not (member lsp-bridge-last-change-command lsp-bridge-completion-stop-commands)))
@@ -776,6 +788,10 @@ you can customize `lsp-bridge-get-project-path-by-filepath' to return project pa
   "If `multiple-cursors' mode is enable, hide completion menu."
   (not (and (ignore-errors (require 'multiple-cursors))
             multiple-cursors-mode)))
+
+(defun lsp-bridge-not-complete-manually ()
+  "If `lsp-bridge-complete-manually' is non-nil, hide completion menu."
+  (not lsp-bridge-complete-manually))
 
 (defun lsp-bridge--point-position (pos)
   "Get position of POS."
@@ -1375,15 +1391,17 @@ you can customize `lsp-bridge-get-project-path-by-filepath' to return project pa
 
 (defun lsp-bridge-get-range-start ()
   (lsp-bridge--point-position
-   (if (region-active-p)
-       (region-beginning)
-     (car (bounds-of-thing-at-point 'sexp)))))
+   (or (if (region-active-p)
+           (region-beginning)
+         (car (bounds-of-thing-at-point 'sexp)))
+       (point))))
 
 (defun lsp-bridge-get-range-end ()
   (lsp-bridge--point-position
-   (if (region-active-p)
-       (region-end)
-     (cdr (bounds-of-thing-at-point 'sexp)))))
+   (or (if (region-active-p)
+           (region-end)
+         (cdr (bounds-of-thing-at-point 'sexp)))
+       (point))))
 
 (defun lsp-bridge-insert-ignore-diagnostic-comment (comment-string)
   (move-end-of-line 1)

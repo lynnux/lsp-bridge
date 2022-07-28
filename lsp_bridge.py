@@ -27,7 +27,7 @@ from typing import Dict
 
 from epc.server import ThreadingEPCServer
 
-from core.fileaction import FileAction
+from core.fileaction import FileAction, create_file_action, FILE_ACTION_DICT, LSP_SERVER_DICT
 from core.lspserver import LspServer
 from core.search_file_words import SearchFileWords
 from core.utils import *
@@ -37,14 +37,18 @@ class LspBridge:
     def __init__(self, args):
 
         # Object cache to exchange information between Emacs and LSP server.
-        self.file_action_dict: Dict[str, FileAction] = {}  # use for contain file action
-        self.lsp_server_dict: Dict[str, LspServer] = {}  # use for contain lsp server
         self.search_file_words = SearchFileWords()
 
         # Build EPC interfaces.
         for name in ["change_file", "change_cursor", "save_file", "ignore_diagnostic", "list_diagnostics"]:
             self.build_file_action_function(name)
-
+            
+        for name in ["change_file", "close_file", "rebuild_cache", "search"]:
+            self.build_search_words_function(name)
+            
+        for name in ["open_file", "close_file"]:
+            self.build_message_function(name)
+            
         for cls in Handler.__subclasses__():
             self.build_file_action_function(cls.name)
 
@@ -114,38 +118,22 @@ class LspBridge:
 
             self.message_queue.task_done()
 
-    def open_file(self, filepath):
-        # We need post function event_loop, otherwise long-time calculation will block Emacs.
-        self.event_queue.put({
-            "name": "open_file",
-            "content": filepath
-        })
-
     def rename_file(self, old_filepath, new_filepath):
-        if is_in_path_dict(self.file_action_dict, old_filepath):
-            get_from_path_dict(self.file_action_dict, old_filepath).rename_file(old_filepath, new_filepath)
+        if is_in_path_dict(FILE_ACTION_DICT, old_filepath):
+            get_from_path_dict(FILE_ACTION_DICT, old_filepath).rename_file(old_filepath, new_filepath)
         
     def completion_hide(self, filepath):
-        if is_in_path_dict(self.file_action_dict, filepath):
-            get_from_path_dict(self.file_action_dict, filepath).last_completion_candidates = []
+        if is_in_path_dict(FILE_ACTION_DICT, filepath):
+            get_from_path_dict(FILE_ACTION_DICT, filepath).last_completion_candidates = []
             
     def pull_diagnostics(self, filepath):
-        if is_in_path_dict(self.file_action_dict, filepath):
-            eval_in_emacs("lsp-bridge-diagnostics-render", filepath, get_from_path_dict(self.file_action_dict, filepath).diagnostics)
+        if is_in_path_dict(FILE_ACTION_DICT, filepath):
+            eval_in_emacs("lsp-bridge-diagnostics-render", filepath, get_from_path_dict(FILE_ACTION_DICT, filepath).diagnostics)
             
     def fetch_completion_item_info(self, filepath, item_key):
-        if is_in_path_dict(self.file_action_dict, filepath):
-            get_from_path_dict(self.file_action_dict, filepath).completion_item_resolve(item_key)
+        if is_in_path_dict(FILE_ACTION_DICT, filepath):
+            get_from_path_dict(FILE_ACTION_DICT, filepath).completion_item_resolve(item_key)
     
-    def create_file_action(self, filepath, lang_server_info, lsp_server, **kwargs):
-        if is_in_path_dict(self.file_action_dict, filepath):
-            if get_from_path_dict(self.file_action_dict, filepath).lsp_server != lsp_server:
-                logger.warn("File {} is opened by different lsp server.".format(filepath))
-            return
-        action = FileAction(filepath, lang_server_info, lsp_server, lsp_bridge=self, **kwargs)
-        add_to_path_dict(self.file_action_dict, filepath, action)
-        return action
-
     def _open_file(self, filepath):
         project_path = get_project_path(filepath)
         lang_server = get_emacs_func_result("get-lang-server", project_path, filepath)
@@ -183,48 +171,33 @@ class LspBridge:
         
         lsp_server_name = "{}#{}".format(path_as_key(project_path), lang_server_info["name"])
 
-        if lsp_server_name not in self.lsp_server_dict:
-            self.lsp_server_dict[lsp_server_name] = LspServer(
+        if lsp_server_name not in LSP_SERVER_DICT:
+            LSP_SERVER_DICT[lsp_server_name] = LspServer(
                 message_queue=self.message_queue,
                 project_path=project_path,
                 server_info=lang_server_info,
                 server_name=lsp_server_name
             )
 
-        lsp_server = self.lsp_server_dict[lsp_server_name]
+        lsp_server = LSP_SERVER_DICT[lsp_server_name]
 
-        self.create_file_action(filepath, lang_server_info, lsp_server)
-
+        create_file_action(filepath, lang_server_info, lsp_server)
+        
         return True
 
-    def close_file(self, filepath):
-        # We need post function event_loop, otherwise long-time calculation will block Emacs.
-        self.event_queue.put({
-            "name": "close_file",
-            "content": filepath
-        })
-
     def _close_file(self, filepath):
-        if is_in_path_dict(self.file_action_dict, filepath):
-            action = get_from_path_dict(self.file_action_dict, filepath)
-
-            lsp_server_name = action.lsp_server.server_name
-            if lsp_server_name in self.lsp_server_dict:
-                lsp_server = self.lsp_server_dict[lsp_server_name]
-                lsp_server.close_file(filepath)
-
-            # Clean file_action_dict after close file.
-            remove_from_path_dict(self.file_action_dict, filepath)
+        if is_in_path_dict(FILE_ACTION_DICT, filepath):
+            get_from_path_dict(FILE_ACTION_DICT, filepath).exit()
             
     def build_file_action_function(self, name):
         def _do(filepath, *args):
             open_file_success = True
 
-            if not is_in_path_dict(self.file_action_dict, filepath):
+            if not is_in_path_dict(FILE_ACTION_DICT, filepath):
                 open_file_success = self._open_file(filepath)  # _do is called inside event_loop, so we can block here.
 
             if open_file_success:
-                action = get_from_path_dict(self.file_action_dict, filepath)
+                action = get_from_path_dict(FILE_ACTION_DICT, filepath)
                 action.call(name, *args)
 
         setattr(self, "_{}".format(name), _do)
@@ -237,27 +210,30 @@ class LspBridge:
             })
 
         setattr(self, name, _do_wrap)
+        
+    def build_search_words_function(self, name):
+        def _do(*args, **kwargs):
+            getattr(self.search_file_words, name)(*args, **kwargs)
 
+        setattr(self, "search_words_{}".format(name), _do)
+
+    def build_message_function(self, name):
+        def _do(filepath):
+            self.event_queue.put({
+                "name": name,
+                "content": filepath
+            })
+            
+        setattr(self, name, _do)
+            
     def handle_server_process_exit(self, server_name):
-        if server_name in self.lsp_server_dict:
+        if server_name in LSP_SERVER_DICT:
             logger.info("Exit server: {}".format(server_name))
-            del self.lsp_server_dict[server_name]
+            del LSP_SERVER_DICT[server_name]
             
     def search_words_index_files(self, filepaths):
         for filepath in filepaths:
             self.search_file_words.change_file(filepath)
-        
-    def search_words_change_file(self, filepath):
-        self.search_file_words.change_file(filepath)
-        
-    def search_words_close_file(self, filepath):
-        self.search_file_words.close_file(filepath)
-        
-    def search_words_rebuild_cache(self):
-        self.search_file_words.rebuild_words_cache()
-        
-    def search_words_search(self, prefix):
-        self.search_file_words.search_words(prefix)
         
     def cleanup(self):
         """Do some cleanup before exit python process."""
@@ -285,7 +261,6 @@ def load_lang_server_info(lang_server):
     with open(lang_server_info_path, encoding="utf-8") as f:
         import json
         return json.load(f)
-
-
+    
 if __name__ == "__main__":
     LspBridge(sys.argv[1:])
