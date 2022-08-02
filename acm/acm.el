@@ -97,6 +97,7 @@
 (require 'acm-backend-path)
 (require 'acm-backend-search-words)
 (require 'acm-backend-tempel)
+(require 'acm-quick-access)
 
 ;;; Code:
 
@@ -112,11 +113,15 @@
   :type '(repeat (choice regexp symbol)))
 
 (defcustom acm-enable-doc t
-  "Popup documentation when this option is turn on."
+  "Popup documentation automatically when this option is turn on."
   :type 'boolean)
 
 (defcustom acm-enable-icon t
   "Show icon in completion menu."
+  :type 'boolean)
+
+(defcustom acm-enable-quick-access nil
+  "Show quick-access in completion menu."
   :type 'boolean)
 
 (defcustom acm-snippet-insert-index 8
@@ -156,10 +161,12 @@
     (define-key map "\n" #'acm-complete)
     (define-key map "\M-h" #'acm-complete)
     (define-key map "\M-H" #'acm-insert-common)
+    (define-key map "\M-d" #'acm-doc-toggle)
     (define-key map "\M-j" #'acm-doc-scroll-up)
     (define-key map "\M-k" #'acm-doc-scroll-down)
     (define-key map "\M-l" #'acm-hide)
     (define-key map "\C-g" #'acm-hide)
+    (acm-keymap--bind-quick-access map)
     map)
   "Keymap used when popup is shown.")
 
@@ -428,9 +435,10 @@ influence of C1 on the result."
                                (acm-backend-search-words-candidates keyword)))
 
         ;; Don't search snippet if char before keyword is not in `acm-backend-lsp-completion-trigger-characters'.
-        (unless (member char-before-keyword acm-backend-lsp-completion-trigger-characters)
-          (setq yas-candidates (acm-backend-yas-candidates keyword))
-          (setq tempel-candidates (acm-backend-tempel-candidates keyword)))
+        (when (and (boundp 'acm-backend-lsp-completion-trigger-characters))
+          (unless (member char-before-keyword acm-backend-lsp-completion-trigger-characters)
+            (setq yas-candidates (acm-backend-yas-candidates keyword))
+            (setq tempel-candidates (acm-backend-tempel-candidates keyword))))
 
         ;; Insert snippet candidates in first page of menu.
         (setq candidates
@@ -662,6 +670,7 @@ influence of C1 on the result."
              (annotation-text (if annotation annotation ""))
              (item-length (funcall acm-string-width-function annotation-text))
              (icon-text (if icon (acm-icon-build (nth 0 icon) (nth 1 icon) (nth 2 icon)) ""))
+             (quick-access-key (nth item-index acm-quick-access-keys))
              candidate-line)
 
         ;; Render deprecated candidate.
@@ -672,6 +681,8 @@ influence of C1 on the result."
         (setq candidate-line
               (concat
                icon-text
+               (when acm-enable-quick-access
+                 (if quick-access-key (concat quick-access-key ". ") "   "))
                candidate
                ;; Fill in the blank according to the maximum width, make sure marks align right of menu.
                (propertize " "
@@ -900,6 +911,20 @@ influence of C1 on the result."
     (when (framep acm-frame)
       (with-selected-frame acm-doc-frame
         (scroll-down-command)))))
+
+(defun acm-doc-toggle ()
+  "Toggle documentation preview for selected candidate."
+  (interactive)
+  (if (acm-frame-visible-p acm-doc-frame)
+      (acm-doc-hide)
+    (let ((acm-enable-doc t))
+      (acm-doc-show))))
+
+;; Emacs 28: Do not show Acm commands with M-X
+(dolist (sym '(acm-hide acm-complete acm-select-first acm-select-last acm-select-next
+               acm-select-prev acm-insert-common acm-doc-scroll-up acm-doc-scroll-down
+               acm-complete-quick-access acm-doc-toggle))
+  (put sym 'completion-predicate #'ignore))
 
 (provide 'acm)
 
