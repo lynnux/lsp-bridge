@@ -10,11 +10,15 @@ import chardet
 import io
 def my_open(filepath, encoding=None, errors=None):
     str = ""
-    with open(filepath, 'rb') as fp:
-        buf = fp.read()
-        result = chardet.detect(buf)
-        if result is not None and result["encoding"] is not None:
-            str = buf.decode(result["encoding"])
+    try:
+        with open(filepath, encoding=encoding) as f:
+            str = f.read()
+    except:
+        with open(filepath, 'rb') as fp:
+            buf = fp.read()
+            result = chardet.detect(buf)
+            if result is not None and result["encoding"] is not None:
+                str = buf.decode(result["encoding"])
     return io.StringIO(str)
 
 class FindReferences(Handler):
