@@ -6,6 +6,16 @@ REFERENCE_PATH = '\033[95m'
 REFERENCE_TEXT = '\033[94m'
 REFERENCE_ENDC = '\033[0m'
 
+import chardet
+import io
+def my_open(filepath, encoding=None, errors=None):
+    str = ""
+    with open(filepath, 'rb') as fp:
+        buf = fp.read()
+        result = chardet.detect(buf)
+        if result is not None and result["encoding"] is not None:
+            str = buf.decode(result["encoding"])
+    return io.StringIO(str)
 
 class FindReferences(Handler):
     name = "find_references"
@@ -35,7 +45,7 @@ class FindReferences(Handler):
                 references_content += "\n" + REFERENCE_PATH + path + REFERENCE_ENDC + "\n"
 
                 for rg in ranges:
-                    with open(path, encoding="utf-8", errors="ignore") as f:
+                    with my_open(path, encoding="utf-8", errors="ignore") as f:
                         line = rg["start"]["line"]
                         start_column = rg["start"]["character"]
                         end_column = rg["end"]["character"]

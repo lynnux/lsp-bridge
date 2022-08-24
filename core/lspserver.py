@@ -42,6 +42,17 @@ from core.utils import *
 
 DEFAULT_BUFFER_SIZE = 100000000  # we need make buffer size big enough, avoid pipe hang by big data response from LSP server
 
+import chardet
+import io
+def my_open(filepath, encoding=None, errors=None):
+    str = ""
+    with open(filepath, 'rb') as fp:
+        buf = fp.read()
+        result = chardet.detect(buf)
+        if result is not None and result["encoding"] is not None:
+            str = buf.decode(result["encoding"])
+    return io.StringIO(str)
+
 class LspServerSender(Thread):
     def __init__(self, process: subprocess.Popen):
         super().__init__()
@@ -322,7 +333,7 @@ class LspServer:
         return uri
 
     def send_did_open_notification(self, filepath, external_file_link=None):
-        with open(filepath, encoding="utf-8", errors="ignore") as f:
+        with my_open(filepath, encoding="utf-8", errors="ignore") as f:
             self.sender.send_notification("textDocument/didOpen", {
                 "textDocument": {
                     "uri": self.parse_document_uri(filepath, external_file_link),
@@ -377,7 +388,7 @@ class LspServer:
 
     def send_whole_change_notification(self, filepath, version, file_content=None):
         if not file_content:
-            with open(filepath, encoding="utf-8", errors="ignore") as f:
+            with my_open(filepath, encoding="utf-8", errors="ignore") as f:
                 file_content = f.read()
         self.sender.send_notification("textDocument/didChange", {
             "textDocument": {
